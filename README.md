@@ -149,3 +149,7 @@ dotnet ef migrations add <Ad> -p src/BenchmarkPlatform.Core -s src/BenchmarkPlat
 ```bash
 dotnet test
 ```
+
+## Lisans
+
+MIT — bkz. [LICENSE](LICENSE).
