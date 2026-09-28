@@ -118,6 +118,47 @@ Notlar:
 - **Koşu detayı** — sıralanabilir sonuç tablosu (ortalama, hata, std sapma, medyan, P95, ops/sn, Gen0, ayrılan bellek, baseline oranı) ve ortalama süre grafiği.
 - **Trendler** — seçilen benchmark'ın koşular boyunca süre ve bellek değişimi.
 - **Karşılaştır** — iki koşu arasında benchmark bazında yüzde fark; eşiği (varsayılan %10) aşanlar regresyon/iyileşme olarak işaretlenir.
+- **Senaryolar** — değerlendirme setleri, yük testleri ve kullanım raporları (aşağıya bakın): koşu listesi,
+  vaka tablosu, metrik trendi ve iki koşunun metrik/vaka bazında karşılaştırması.
+
+## Senaryo koşuları (`scenario-run/v1`)
+
+BenchmarkDotNet dışındaki ölçümler — doğruluk/tutarlılık setleri, yük testleri, kullanım raporları — bu
+belgeyle gelir. Dashboard üreticiyi tanımaz, üretici de dashboard'a referans vermez; tek bağ bu JSON.
+
+```json
+{
+  "schema": "scenario-run/v1",
+  "kind": "eval",                    // eval | load | usage | ...
+  "suite": "dummydata-eticaret",     // trend ve karşılaştırma yalnızca aynı set içinde
+  "label": "prompt v2",
+  "startedAt": "2026-09-28T10:00:00Z",
+  "finishedAt": "2026-09-28T10:03:12Z",
+  "gitCommit": "abc1234", "gitBranch": "main",
+  "machineName": "ci", "target": "http://localhost:5000",
+  "environment": { "model": "..." },
+  "metrics": [ { "name": "accuracy", "value": 0.92, "unit": "ratio", "direction": "higher" } ],
+  "cases": [
+    { "name": "toplam-siparis", "group": "sayma", "success": true, "message": null,
+      "metrics": [ { "name": "latency.mean", "value": 1830, "unit": "ms", "direction": "lower" } ],
+      "details": { "serbest": "JSON" } }
+  ]
+}
+```
+
+- `direction`: `higher` / `lower` / `none`. Karşılaştırma yalnızca yönü bilinen metrikleri
+  kötüleşme/iyileşme olarak işaretler; ayrıca sonucu değişen vakaları (başarılı → başarısız) listeler.
+- `unit` serbest metindir; arayüz `ratio`, `ms`, `s`, `USD`, `bytes`, `tokens`, `users`, `count` birimlerini
+  biçimlendirir.
+- Doğrulama katıdır (NaN, yinelenen vaka adı, bilinmeyen yön reddedilir): bu koşular kanıt olarak
+  kullanılıyor ve sessizce düzeltilen bir değer karşılaştırmayı yanıltır.
+
+BenchmarkDotNet'i bu projenin exporter'ı olmadan kullanan projeler, kendi `JsonExporter.Full`
+raporlarını `POST /api/runs/import/bdn` ile gönderebilir; sonuçlar normal koşu olarak görünür.
+Aynı `runId` ile gönderilen dosyalar tek koşuda toplanır. (BenchmarkDotNet JSON'u baseline bilgisini
+taşımadığı için bu yoldan gelen koşularda **Oran** sütunu boş kalır.)
+
+`Ingest:ApiKey` ayarlanırsa iki içe aktarma ucu da `X-Api-Key` başlığını ister.
 
 ## API
 
@@ -130,6 +171,14 @@ Notlar:
 | `GET /api/benchmarks/history?fullName=&limit=` | Bir benchmark'ın zaman serisi |
 | `GET /api/compare?baselineRunId=&targetRunId=&threshold=` | İki koşunun karşılaştırması |
 | `GET /api/summary` | Dashboard özet sayaçları |
+| `POST /api/runs/import/bdn?runId&label&gitCommit&gitBranch&machineName` | BenchmarkDotNet `JsonExporter.Full` raporunu içe alır |
+| `POST /api/scenario-runs` | `scenario-run/v1` belgesini kaydeder |
+| `GET /api/scenario-runs?kind&suite&skip&take` | Senaryo koşuları |
+| `GET /api/scenario-runs/{id}` | Koşu detayı: metrikler, ortam, vakalar |
+| `DELETE /api/scenario-runs/{id}` | Koşuyu siler |
+| `GET /api/scenario-runs/suites` | Setler, metrik ve vaka adları |
+| `GET /api/scenario-runs/history?suite&metric&case&limit` | Bir metriğin (koşu ya da vaka düzeyinde) zaman serisi |
+| `GET /api/scenario-runs/compare?baselineRunId&targetRunId&threshold` | İki senaryo koşusunun karşılaştırması |
 | `GET /health` | Sağlık kontrolü ve kullanılan veritabanı yolu |
 
 ## Veritabanı

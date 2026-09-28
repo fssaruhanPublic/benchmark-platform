@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- A real BenchmarkDotNet 0.15.8 JsonExporter.Full report, not a hand-written sample. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\BenchmarkPlatform.Core\BenchmarkPlatform.Core.csproj" />
     <ProjectReference Include="..\..\src\BenchmarkPlatform.Reporting\BenchmarkPlatform.Reporting.csproj" />
     <ProjectReference Include="..\..\src\BenchmarkPlatform.Api\BenchmarkPlatform.Api.csproj" />

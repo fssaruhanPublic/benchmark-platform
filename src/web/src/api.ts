@@ -131,4 +131,127 @@ export const api = {
       throw new Error(`Kosu silinemedi: ${response.status}`)
     }
   },
+
+  scenarioSuites: () => get<ScenarioSuite[]>('/api/scenario-runs/suites'),
+  scenarioRuns: (suite?: string) =>
+    get<ScenarioRunList>(`/api/scenario-runs?take=200${suite ? `&suite=${encodeURIComponent(suite)}` : ''}`),
+  scenarioRun: (id: string) => get<ScenarioRunDetail>(`/api/scenario-runs/${id}`),
+  scenarioHistory: (suite: string, metric: string, caseName?: string) =>
+    get<ScenarioHistory>(
+      `/api/scenario-runs/history?suite=${encodeURIComponent(suite)}&metric=${encodeURIComponent(metric)}` +
+        (caseName ? `&case=${encodeURIComponent(caseName)}` : '') +
+        '&limit=200',
+    ),
+  scenarioCompare: (baselineRunId: string, targetRunId: string, threshold: number) =>
+    get<ScenarioComparison>(
+      `/api/scenario-runs/compare?baselineRunId=${baselineRunId}&targetRunId=${targetRunId}&threshold=${threshold}`,
+    ),
+  deleteScenarioRun: async (id: string) => {
+    const response = await fetch(`/api/scenario-runs/${id}`, { method: 'DELETE' })
+    if (!response.ok) {
+      throw new Error(`Kosu silinemedi: ${response.status}`)
+    }
+  },
+}
+
+export type MetricDirection = 'higher' | 'lower' | 'none'
+
+export interface ScenarioMetric {
+  name: string
+  value: number
+  unit: string
+  direction: MetricDirection
+}
+
+export interface ScenarioRunSummary {
+  id: string
+  kind: string
+  suite: string
+  label: string | null
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  gitCommit: string | null
+  gitBranch: string | null
+  machineName: string
+  target: string | null
+  caseCount: number
+  passedCount: number
+  metrics: ScenarioMetric[]
+}
+
+export interface ScenarioCase {
+  id: string
+  name: string
+  group: string
+  success: boolean
+  message: string | null
+  details: unknown
+  metrics: ScenarioMetric[]
+}
+
+export interface ScenarioRunDetail {
+  run: ScenarioRunSummary
+  environment: Record<string, string>
+  cases: ScenarioCase[]
+}
+
+export interface ScenarioRunList {
+  total: number
+  items: ScenarioRunSummary[]
+}
+
+export interface ScenarioSuite {
+  suite: string
+  kind: string
+  runCount: number
+  lastRunAt: string
+  runMetrics: string[]
+  caseMetrics: string[]
+  cases: string[]
+}
+
+export interface ScenarioHistoryPoint {
+  runId: string
+  startedAt: string
+  label: string | null
+  gitCommit: string | null
+  value: number
+  success: boolean | null
+}
+
+export interface ScenarioHistory {
+  suite: string
+  metric: string
+  case: string | null
+  unit: string
+  direction: MetricDirection
+  points: ScenarioHistoryPoint[]
+}
+
+export interface ScenarioComparisonRow {
+  case: string | null
+  metric: string
+  unit: string
+  direction: MetricDirection
+  baselineValue: number | null
+  targetValue: number | null
+  deltaPercent: number | null
+  status: ComparisonStatus
+}
+
+export interface ScenarioOutcomeChange {
+  case: string
+  baselineSuccess: boolean | null
+  targetSuccess: boolean | null
+}
+
+export interface ScenarioComparison {
+  baseline: ScenarioRunSummary
+  target: ScenarioRunSummary
+  threshold: number
+  regressionCount: number
+  improvementCount: number
+  rows: ScenarioComparisonRow[]
+  outcomeChanges: ScenarioOutcomeChange[]
 }

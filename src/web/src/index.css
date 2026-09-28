@@ -315,6 +315,88 @@ td.num {
   gap: 1rem;
 }
 
+/* --- Scenario pages ------------------------------------------------------ */
+
+.subnav {
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.suite-card {
+  text-align: left;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.suite-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.suite-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.metric-chip {
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.env-card {
+  margin-bottom: 1rem;
+}
+
+.env-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.env-list dt {
+  color: var(--text-muted);
+}
+
+.env-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.details-row td {
+  text-align: left;
+  white-space: normal;
+  background: var(--surface-2);
+}
+
+tr.details-row pre {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 0.8rem;
+}
+
+.case-message {
+  margin: 0 0 0.5rem;
+  color: var(--bad);
+}
+
 @media (max-width: 640px) {
   main {
     padding: 1rem;
