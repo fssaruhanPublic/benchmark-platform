@@ -67,7 +67,8 @@ public record ScenarioRunSummaryDto(
     string? Target,
     int CaseCount,
     int PassedCount,
-    IReadOnlyList<ScenarioMetricDto> Metrics);
+    IReadOnlyList<ScenarioMetricDto> Metrics,
+    IReadOnlyDictionary<string, string> Environment);
 
 public record ScenarioCaseDto(
     Guid Id,

@@ -262,7 +262,16 @@ public class ScenarioQueryService(BenchmarkDbContext db)
         new(run.Id, run.Kind, run.Suite, run.Label, run.StartedAt, run.FinishedAt,
             (run.FinishedAt - run.StartedAt).TotalMilliseconds, run.GitCommit, run.GitBranch, run.MachineName,
             run.Target, run.CaseCount, run.PassedCount,
-            metrics.TryGetValue(run.Id, out var list) ? list.Select(ToMetricDto).ToList() : []);
+            metrics.TryGetValue(run.Id, out var list) ? list.Select(ToMetricDto).ToList() : [],
+            // Ortam listede de donuyor: panel "yutulan SQL hatasi" gibi notlari
+            // her kosunun detayini ayri cekmeden gosterebilsin. Kucuk bir sozluk.
+            ParseEnvironment(run.EnvironmentJson));
+
+    private static IReadOnlyDictionary<string, string> ParseEnvironment(string json)
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? []; }
+        catch (JsonException) { return new Dictionary<string, string>(); }
+    }
 
     private static ScenarioMetricDto ToMetricDto(ScenarioMetric metric) =>
         new(metric.Name, metric.Value, metric.Unit, ScenarioRunImporter.FormatDirection(metric.Direction));

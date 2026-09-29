@@ -178,6 +178,7 @@ export interface ScenarioRunSummary {
   caseCount: number
   passedCount: number
   metrics: ScenarioMetric[]
+  environment: Record<string, string>
 }
 
 export interface ScenarioCase {

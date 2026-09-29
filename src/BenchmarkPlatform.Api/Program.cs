@@ -33,8 +33,14 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+// The Vite dev server plus any consumer that reads this API from a browser (e.g. an admin
+// panel showing scenario results). Cors:AllowedOrigins replaces the list entirely.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() is { Length: > 0 } configured
+    ? configured
+    : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:59265", "http://localhost:59666"];
+
 builder.Services.AddCors(options => options.AddPolicy(DashboardCors, policy => policy
-    .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+    .WithOrigins(corsOrigins)
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
