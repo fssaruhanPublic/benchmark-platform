@@ -3,8 +3,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchmarkPlatform.Core.Data;
 
-public class BenchmarkDbContext(DbContextOptions<BenchmarkDbContext> options) : DbContext(options)
+public class BenchmarkDbContext : DbContext
 {
+    public BenchmarkDbContext(DbContextOptions<BenchmarkDbContext> options) : base(options)
+    {
+    }
+
+    /// <summary>For provider-specific subclasses (see <see cref="SqlServerBenchmarkDbContext"/>).</summary>
+    protected BenchmarkDbContext(DbContextOptions options) : base(options)
+    {
+    }
+
     public DbSet<BenchmarkRun> Runs => Set<BenchmarkRun>();
 
     public DbSet<BenchmarkResult> Results => Set<BenchmarkResult>();

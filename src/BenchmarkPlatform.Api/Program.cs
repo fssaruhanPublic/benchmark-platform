@@ -7,20 +7,41 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string DashboardCors = "dashboard";
 
-// Resolved lazily so tests (and any host that layers configuration late) can override it.
-builder.Services.AddDbContext<BenchmarkDbContext>((serviceProvider, options) =>
+// Database:Provider = Sqlite (default, local file) | SqlServer (hosted, e.g. Azure SQL).
+// Each provider has its own migration set; the model is the same.
+var useSqlServer = string.Equals(builder.Configuration["Database:Provider"], "SqlServer",
+    StringComparison.OrdinalIgnoreCase);
+
+if (useSqlServer)
 {
-    var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
-
-    if (string.IsNullOrWhiteSpace(configured))
+    builder.Services.AddDbContext<BenchmarkDbContext, SqlServerBenchmarkDbContext>((serviceProvider, options) =>
     {
-        var databasePath = BenchmarkDbPath.Resolve();
-        BenchmarkDbPath.EnsureDirectoryExists(databasePath);
-        configured = $"Data Source={databasePath}";
-    }
+        var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
+        if (string.IsNullOrWhiteSpace(configured))
+            throw new InvalidOperationException("Database:Provider is SqlServer but ConnectionStrings:Benchmarks is empty.");
 
-    options.UseSqlite(configured);
-});
+        // Serverless Azure SQL pauses when idle; the first connection after a pause can fail
+        // while the database resumes. Retrying covers that without a user-visible error.
+        options.UseSqlServer(configured, sql => sql.EnableRetryOnFailure(6, TimeSpan.FromSeconds(10), null));
+    });
+}
+else
+{
+    // Resolved lazily so tests (and any host that layers configuration late) can override it.
+    builder.Services.AddDbContext<BenchmarkDbContext>((serviceProvider, options) =>
+    {
+        var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            var databasePath = BenchmarkDbPath.Resolve();
+            BenchmarkDbPath.EnsureDirectoryExists(databasePath);
+            configured = $"Data Source={databasePath}";
+        }
+
+        options.UseSqlite(configured);
+    });
+}
 builder.Services.AddScoped<BenchmarkQueryService>();
 builder.Services.AddScoped<ScenarioQueryService>();
 builder.Services.AddScoped<ScenarioRunImporter>();
@@ -171,7 +192,13 @@ scenarios.MapGet("/{id:guid}", async (Guid id, ScenarioQueryService service, Can
 scenarios.MapDelete("/{id:guid}", async (Guid id, ScenarioQueryService service, CancellationToken ct)
     => await service.DeleteRunAsync(id, ct) ? Results.NoContent() : Results.NotFound());
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok", database = BenchmarkDbPath.Resolve() }));
+// The database value is the local file path for SQLite; for SQL Server only the provider name
+// (never the connection string).
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok",
+    database = useSqlServer ? "sqlserver" : BenchmarkDbPath.Resolve()
+}));
 
 if (hasBuiltFrontend)
 {
