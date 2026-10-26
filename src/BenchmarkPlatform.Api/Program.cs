@@ -7,27 +7,61 @@ var builder = WebApplication.CreateBuilder(args);
 
 const string DashboardCors = "dashboard";
 
-// Resolved lazily so tests (and any host that layers configuration late) can override it.
-builder.Services.AddDbContext<BenchmarkDbContext>((serviceProvider, options) =>
+// Database:Provider = Sqlite (default, local file) | SqlServer (hosted, e.g. Azure SQL).
+// Each provider has its own migration set; the model is the same.
+var useSqlServer = string.Equals(builder.Configuration["Database:Provider"], "SqlServer",
+    StringComparison.OrdinalIgnoreCase);
+
+if (useSqlServer)
 {
-    var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
-
-    if (string.IsNullOrWhiteSpace(configured))
+    builder.Services.AddDbContext<BenchmarkDbContext, SqlServerBenchmarkDbContext>((serviceProvider, options) =>
     {
-        var databasePath = BenchmarkDbPath.Resolve();
-        BenchmarkDbPath.EnsureDirectoryExists(databasePath);
-        configured = $"Data Source={databasePath}";
-    }
+        var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
+        if (string.IsNullOrWhiteSpace(configured))
+            throw new InvalidOperationException("Database:Provider is SqlServer but ConnectionStrings:Benchmarks is empty.");
 
-    options.UseSqlite(configured);
-});
+        // Serverless Azure SQL pauses when idle; the first connection after a pause can fail
+        // while the database resumes. Retrying covers that without a user-visible error.
+        options.UseSqlServer(configured, sql => sql.EnableRetryOnFailure(6, TimeSpan.FromSeconds(10), null));
+    });
+}
+else
+{
+    // Resolved lazily so tests (and any host that layers configuration late) can override it.
+    builder.Services.AddDbContext<BenchmarkDbContext>((serviceProvider, options) =>
+    {
+        var configured = serviceProvider.GetRequiredService<IConfiguration>().GetConnectionString("Benchmarks");
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            var databasePath = BenchmarkDbPath.Resolve();
+            BenchmarkDbPath.EnsureDirectoryExists(databasePath);
+            configured = $"Data Source={databasePath}";
+        }
+
+        options.UseSqlite(configured);
+    });
+}
 builder.Services.AddScoped<BenchmarkQueryService>();
+builder.Services.AddScoped<ScenarioQueryService>();
+builder.Services.AddScoped<ScenarioRunImporter>();
+builder.Services.AddScoped<BdnJsonImporter>();
+
+// Scenario documents can be large (thousands of eval cases with details).
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
+    options.Limits.MaxRequestBodySize = 64 * 1024 * 1024);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+// The Vite dev server plus any consumer that reads this API from a browser (e.g. an admin
+// panel showing scenario results). Cors:AllowedOrigins replaces the list entirely.
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() is { Length: > 0 } configured
+    ? configured
+    : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:59265", "http://localhost:59666"];
+
 builder.Services.AddCors(options => options.AddPolicy(DashboardCors, policy => policy
-    .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+    .WithOrigins(corsOrigins)
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
@@ -81,7 +115,90 @@ api.MapGet("/compare", async (Guid baselineRunId, Guid targetRunId, BenchmarkQue
 api.MapGet("/summary", async (BenchmarkQueryService service, CancellationToken ct)
     => Results.Ok(await service.GetSummaryAsync(ct)));
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok", database = BenchmarkDbPath.Resolve() }));
+// Ingest endpoints are the only writes reachable from other machines' tools. When
+// Ingest:ApiKey is configured the caller must present it; unset keeps local use simple.
+static bool IngestAllowed(HttpRequest request, IConfiguration configuration)
+{
+    var expectedKey = configuration["Ingest:ApiKey"];
+    return string.IsNullOrEmpty(expectedKey) ||
+           string.Equals(request.Headers["X-Api-Key"].ToString(), expectedKey, StringComparison.Ordinal);
+}
+
+// BenchmarkDotNet's own JSON report (JsonExporter.Full), for projects that do not use the
+// in-process exporter. Same runId across calls = one run (BDN writes one file per class).
+api.MapPost("/runs/import/bdn", async (HttpRequest request, IConfiguration configuration, BdnJsonImporter importer,
+        CancellationToken ct, Guid? runId = null, string? label = null, string? gitCommit = null,
+        string? gitBranch = null, string? machineName = null) =>
+{
+    if (!IngestAllowed(request, configuration)) return Results.Unauthorized();
+
+    using var reader = new StreamReader(request.Body);
+    var json = await reader.ReadToEndAsync(ct);
+
+    try
+    {
+        var (id, imported) = await importer.ImportAsync(json, new BdnImportMetadata(runId, label, gitCommit, gitBranch, machineName), ct);
+        return Results.Ok(new { id, imported });
+    }
+    catch (ScenarioValidationException exception)
+    {
+        return Results.BadRequest(new { error = "Invalid BenchmarkDotNet report.", errors = exception.Errors });
+    }
+});
+
+// --- Scenario runs (eval sets, load tests): "scenario-run/v1" documents ---------------
+
+var scenarios = api.MapGroup("/scenario-runs");
+
+scenarios.MapPost("/", async (ScenarioRunDocument document, HttpRequest request, IConfiguration configuration,
+        ScenarioRunImporter importer, CancellationToken ct) =>
+{
+    if (!IngestAllowed(request, configuration)) return Results.Unauthorized();
+
+    try
+    {
+        var result = await importer.ImportAsync(document, ct);
+        return Results.Created($"/api/scenario-runs/{result.Id}", result);
+    }
+    catch (ScenarioValidationException exception)
+    {
+        return Results.BadRequest(new { error = "Invalid scenario run.", errors = exception.Errors });
+    }
+});
+
+scenarios.MapGet("/", async (ScenarioQueryService service, CancellationToken ct,
+        string? kind = null, string? suite = null, int skip = 0, int take = 50)
+    => Results.Ok(await service.GetRunsAsync(kind, suite, skip, take, ct)));
+
+scenarios.MapGet("/suites", async (ScenarioQueryService service, CancellationToken ct)
+    => Results.Ok(await service.GetSuitesAsync(ct)));
+
+scenarios.MapGet("/history", async (string suite, string metric, ScenarioQueryService service,
+        CancellationToken ct, string? @case = null, int limit = 100)
+    => string.IsNullOrWhiteSpace(suite) || string.IsNullOrWhiteSpace(metric)
+        ? Results.BadRequest(new { error = "suite and metric are required." })
+        : Results.Ok(await service.GetHistoryAsync(suite, metric, string.IsNullOrWhiteSpace(@case) ? null : @case,
+            limit, ct)));
+
+scenarios.MapGet("/compare", async (Guid baselineRunId, Guid targetRunId, ScenarioQueryService service,
+        CancellationToken ct, double threshold = BenchmarkQueryService.DefaultThreshold)
+    => await service.CompareAsync(baselineRunId, targetRunId, threshold, ct) is { } comparison
+        ? Results.Ok(comparison)
+        : Results.NotFound(new { error = "One of the runs was not found." }));
+
+scenarios.MapGet("/{id:guid}", async (Guid id, ScenarioQueryService service, CancellationToken ct)
+    => await service.GetRunAsync(id, ct) is { } run ? Results.Ok(run) : Results.NotFound());
+
+scenarios.MapDelete("/{id:guid}", async (Guid id, ScenarioQueryService service, CancellationToken ct)
+    => await service.DeleteRunAsync(id, ct) ? Results.NoContent() : Results.NotFound());
+
+// The database value is the local file path for SQLite; for SQL Server only the provider name
+// (never the connection string).
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "ok",
+    database = useSqlServer ? "sqlserver" : BenchmarkDbPath.Resolve()
+}));
 
 if (hasBuiltFrontend)
 {

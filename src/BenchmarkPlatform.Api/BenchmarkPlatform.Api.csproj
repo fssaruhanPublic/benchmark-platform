@@ -5,6 +5,9 @@
   </ItemGroup>
 
   <PropertyGroup>
+    <!-- Microsoft.Data.SqlClient (SQL Server provider) refuses to run in invariant mode, which
+         Directory.Build.props turns on for everything else. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

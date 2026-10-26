@@ -174,6 +174,146 @@ namespace BenchmarkPlatform.Core.Data.Migrations
                     b.ToTable("Runs");
                 });
 
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DetailsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "Name");
+
+                    b.ToTable("ScenarioCases", (string)null);
+                });
+
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioMetric", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("CaseId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Value")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseId");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("RunId", "CaseId", "Name");
+
+                    b.ToTable("ScenarioMetrics", (string)null);
+                });
+
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CaseCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EnvironmentJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("FinishedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("GitBranch")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GitCommit")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ImportedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MachineName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PassedCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("StartedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Suite")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind");
+
+                    b.HasIndex("Suite", "StartedAt");
+
+                    b.ToTable("ScenarioRuns", (string)null);
+                });
+
             modelBuilder.Entity("BenchmarkPlatform.Core.Entities.BenchmarkResult", b =>
                 {
                     b.HasOne("BenchmarkPlatform.Core.Entities.BenchmarkRun", "Run")
@@ -185,9 +325,44 @@ namespace BenchmarkPlatform.Core.Data.Migrations
                     b.Navigation("Run");
                 });
 
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioCase", b =>
+                {
+                    b.HasOne("BenchmarkPlatform.Core.Entities.ScenarioRun", "Run")
+                        .WithMany("Cases")
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioMetric", b =>
+                {
+                    b.HasOne("BenchmarkPlatform.Core.Entities.ScenarioCase", null)
+                        .WithMany("Metrics")
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("BenchmarkPlatform.Core.Entities.ScenarioRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BenchmarkPlatform.Core.Entities.BenchmarkRun", b =>
                 {
                     b.Navigation("Results");
+                });
+
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioCase", b =>
+                {
+                    b.Navigation("Metrics");
+                });
+
+            modelBuilder.Entity("BenchmarkPlatform.Core.Entities.ScenarioRun", b =>
+                {
+                    b.Navigation("Cases");
                 });
 #pragma warning restore 612, 618
         }

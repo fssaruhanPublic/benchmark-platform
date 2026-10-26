@@ -3,14 +3,31 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchmarkPlatform.Core.Data;
 
-public class BenchmarkDbContext(DbContextOptions<BenchmarkDbContext> options) : DbContext(options)
+public class BenchmarkDbContext : DbContext
 {
+    public BenchmarkDbContext(DbContextOptions<BenchmarkDbContext> options) : base(options)
+    {
+    }
+
+    /// <summary>For provider-specific subclasses (see <see cref="SqlServerBenchmarkDbContext"/>).</summary>
+    protected BenchmarkDbContext(DbContextOptions options) : base(options)
+    {
+    }
+
     public DbSet<BenchmarkRun> Runs => Set<BenchmarkRun>();
 
     public DbSet<BenchmarkResult> Results => Set<BenchmarkResult>();
 
+    public DbSet<ScenarioRun> ScenarioRuns => Set<ScenarioRun>();
+
+    public DbSet<ScenarioCase> ScenarioCases => Set<ScenarioCase>();
+
+    public DbSet<ScenarioMetric> ScenarioMetrics => Set<ScenarioMetric>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureScenarios(modelBuilder);
+
         modelBuilder.Entity<BenchmarkRun>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -47,6 +64,73 @@ public class BenchmarkDbContext(DbContextOptions<BenchmarkDbContext> options) : 
                 .WithMany(r => r.Results)
                 .HasForeignKey(e => e.RunId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureScenarios(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ScenarioRun>(entity =>
+        {
+            entity.ToTable("ScenarioRuns");
+            entity.HasKey(e => e.Id);
+
+            // Same reason as BenchmarkRun.RunAt: SQLite cannot order DateTimeOffset.
+            entity.Property(e => e.StartedAt).HasConversion(
+                value => value.UtcTicks, value => new DateTimeOffset(value, TimeSpan.Zero));
+            entity.Property(e => e.FinishedAt).HasConversion(
+                value => value.UtcTicks, value => new DateTimeOffset(value, TimeSpan.Zero));
+            entity.Property(e => e.ImportedAt).HasConversion(
+                value => value.UtcTicks, value => new DateTimeOffset(value, TimeSpan.Zero));
+
+            entity.HasIndex(e => new { e.Suite, e.StartedAt });
+            entity.HasIndex(e => e.Kind);
+            entity.Property(e => e.Kind).HasMaxLength(40);
+            entity.Property(e => e.Suite).HasMaxLength(200);
+            entity.Property(e => e.Label).HasMaxLength(200);
+            entity.Property(e => e.GitCommit).HasMaxLength(60);
+            entity.Property(e => e.GitBranch).HasMaxLength(200);
+            entity.Property(e => e.MachineName).HasMaxLength(200);
+            entity.Property(e => e.Target).HasMaxLength(500);
+
+            entity.HasMany(e => e.Cases)
+                .WithOne(c => c.Run)
+                .HasForeignKey(c => c.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+        });
+
+        modelBuilder.Entity<ScenarioCase>(entity =>
+        {
+            entity.ToTable("ScenarioCases");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.RunId, e.Name });
+            entity.Property(e => e.Name).HasMaxLength(400);
+            entity.Property(e => e.Group).HasMaxLength(200);
+            entity.Property(e => e.Message).HasMaxLength(2000);
+
+            entity.HasMany(e => e.Metrics)
+                .WithOne()
+                .HasForeignKey(m => m.CaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ScenarioMetric>(entity =>
+        {
+            entity.ToTable("ScenarioMetrics");
+            entity.HasKey(e => e.Id);
+
+            // Every metric carries its RunId, run-level (CaseId null) or not, so the
+            // history query can filter by run without joining through cases. SQLite
+            // allows the resulting two cascade paths (run → metric, run → case → metric).
+            entity.HasOne<ScenarioRun>()
+                .WithMany()
+                .HasForeignKey(m => m.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.RunId, e.CaseId, e.Name });
+            entity.HasIndex(e => e.Name);
+            entity.Property(e => e.Name).HasMaxLength(120);
+            entity.Property(e => e.Unit).HasMaxLength(40);
         });
     }
 }

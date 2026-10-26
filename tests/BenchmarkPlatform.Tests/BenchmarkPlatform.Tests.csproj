@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Microsoft.Data.SqlClient (SQL Server provider) refuses to run in invariant mode, which
+         Directory.Build.props turns on for everything else. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -17,6 +20,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A real BenchmarkDotNet 0.15.8 JsonExporter.Full report, not a hand-written sample. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
